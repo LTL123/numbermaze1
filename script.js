@@ -57,7 +57,6 @@ class NumberMaze {
         
         this.closeModalBtns = document.querySelectorAll('.close-modal');
         this.levelListEl = document.getElementById('level-list');
-        this.filterTabs = document.querySelectorAll('.filter-tab');
         
         // Modal inputs
         this.deletePasswordInput = document.getElementById('delete-password-input');
@@ -112,9 +111,7 @@ class NumberMaze {
 
         this.clickTimer = null;
         this.ADMIN_PASSWORD = "admin"; // Hardcoded simple password
-        this.allLevels = []; // Store all fetched levels
-        this.currentFilter = 'all';
-
+        
         this.init();
     }
 
@@ -127,16 +124,6 @@ class NumberMaze {
         this.generateLevel();
         this.render();
         this.updateStatus("请点击数字 1 开始游戏");
-        
-        // Initialize filter tabs
-        this.filterTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                this.filterTabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                this.currentFilter = tab.dataset.filter;
-                this.filterLevels();
-            });
-        });
     }
     
     resetLevel() {
@@ -603,19 +590,9 @@ class NumberMaze {
         
         try {
             const results = await query.find();
-            this.allLevels = results;
-            this.filterLevels();
+            this.renderLevelList(results);
         } catch (error) {
             this.levelListEl.innerHTML = '加载失败: ' + error.message;
-        }
-    }
-    
-    filterLevels() {
-        if (this.currentFilter === 'all') {
-            this.renderLevelList(this.allLevels);
-        } else {
-            const filtered = this.allLevels.filter(level => level.get('difficulty') === this.currentFilter);
-            this.renderLevelList(filtered);
         }
     }
     
@@ -655,13 +632,13 @@ class NumberMaze {
             // Rename button
             item.querySelector('.btn-rename').addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.showRenameModal(level);
+                this.renameLevel(level);
             });
 
             // Delete button
             item.querySelector('.btn-delete').addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.showDeleteModal(level);
+                this.deleteLevel(level);
             });
             
             this.levelListEl.appendChild(item);
