@@ -29,12 +29,51 @@
     <!-- Load Level Modal -->
     <div id="load-modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <span class="close-modal">&times;</span>
+            <span class="close-modal" data-target="load-modal">&times;</span>
             <h2>选择关卡</h2>
+            <div class="filter-tabs">
+                <div class="filter-tab active" data-filter="all">全部</div>
+                <div class="filter-tab" data-filter="easy">简单</div>
+                <div class="filter-tab" data-filter="medium">中等</div>
+                <div class="filter-tab" data-filter="hard">困难</div>
+            </div>
             <div id="level-list">正在加载...</div>
         </div>
     </div>
+    
+    <!-- Password Modal for Delete -->
+    <div id="password-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <span class="close-modal" data-target="password-modal">&times;</span>
+            <h2>验证密码</h2>
+            <p>请输入管理员密码以删除关卡：</p>
+            <input type="password" id="delete-password-input" class="modal-input" placeholder="请输入密码">
+            <div class="modal-actions">
+                <button id="confirm-delete-btn" class="modal-btn btn-danger">删除</button>
+                <button id="cancel-delete-btn" class="modal-btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div id="rename-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <span class="close-modal" data-target="rename-modal">&times;</span>
+            <h2>重命名关卡</h2>
+            <p>请输入新名称和管理员密码：</p>
+            <input type="text" id="rename-name-input" class="modal-input" placeholder="新关卡名称">
+            <input type="password" id="rename-password-input" class="modal-input" placeholder="请输入密码" style="margin-top: 10px;">
+            <div class="modal-actions">
+                <button id="confirm-rename-btn" class="modal-btn btn-primary">确认修改</button>
+                <button id="cancel-rename-btn" class="modal-btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Celebration Canvas -->
+    <canvas id="celebration-canvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; display: none;"></canvas>
 
     <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </body>
 </html>

@@ -1,4 +1,25 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Prevent default context menu and shortcuts to deter viewing source
+    document.addEventListener('contextmenu', event => event.preventDefault());
+    document.addEventListener('keydown', function(event) {
+        // F12
+        if (event.key === 'F12') {
+            event.preventDefault();
+        }
+        // Ctrl+Shift+I/J/C
+        if (event.ctrlKey && event.shiftKey && ['I','J','C','i','j','c'].includes(event.key)) {
+            event.preventDefault();
+        }
+        // Meta(Cmd)+Option+I/J/C (Mac)
+        if (event.metaKey && event.altKey && ['I','J','C','i','j','c'].includes(event.key)) {
+            event.preventDefault();
+        }
+        // Ctrl+U or Meta+U
+        if ((event.ctrlKey || event.metaKey) && (event.key === 'u' || event.key === 'U')) {
+            event.preventDefault();
+        }
+    });
+
     // Initialize LeanCloud
     AV.init({
         appId: "F3hGyTJb4wrF7imat01yLkQl-gzGzoHsz",
@@ -31,8 +52,27 @@ class NumberMaze {
         
         // Modal elements
         this.loadModal = document.getElementById('load-modal');
-        this.closeModalBtn = document.querySelector('.close-modal');
+        this.passwordModal = document.getElementById('password-modal');
+        this.renameModal = document.getElementById('rename-modal');
+        
+        this.closeModalBtns = document.querySelectorAll('.close-modal');
         this.levelListEl = document.getElementById('level-list');
+        this.filterTabs = document.querySelectorAll('.filter-tab');
+        
+        // Modal inputs
+        this.deletePasswordInput = document.getElementById('delete-password-input');
+        this.renameNameInput = document.getElementById('rename-name-input');
+        this.renamePasswordInput = document.getElementById('rename-password-input');
+        
+        // Action buttons
+        this.confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        this.cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+        this.confirmRenameBtn = document.getElementById('confirm-rename-btn');
+        this.cancelRenameBtn = document.getElementById('cancel-rename-btn');
+        
+        // State for actions
+        this.targetLevelId = null;
+        this.targetLevelName = null;
         
         this.restartBtn.addEventListener('click', () => this.init());
         this.resetLevelBtn.addEventListener('click', () => this.resetLevel());
@@ -41,15 +81,40 @@ class NumberMaze {
         this.difficultySelect.addEventListener('change', () => this.init());
         
         // Modal events
-        this.closeModalBtn.addEventListener('click', () => this.closeLoadModal());
-        window.addEventListener('click', (e) => {
-            if (e.target === this.loadModal) {
-                this.closeLoadModal();
-            }
+        this.closeModalBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const targetId = e.target.dataset.target;
+                if (targetId) {
+                    document.getElementById(targetId).style.display = 'none';
+                }
+            });
         });
         
-        this.clickTimer = null;
+        window.addEventListener('click', (e) => {
+            if (e.target === this.loadModal) this.loadModal.style.display = 'none';
+            if (e.target === this.passwordModal) this.passwordModal.style.display = 'none';
+            if (e.target === this.renameModal) this.renameModal.style.display = 'none';
+        });
         
+        // Action Listeners
+        this.confirmDeleteBtn.addEventListener('click', () => this.executeDelete());
+        this.cancelDeleteBtn.addEventListener('click', () => {
+            this.passwordModal.style.display = 'none';
+            this.deletePasswordInput.value = '';
+        });
+        
+        this.confirmRenameBtn.addEventListener('click', () => this.executeRename());
+        this.cancelRenameBtn.addEventListener('click', () => {
+            this.renameModal.style.display = 'none';
+            this.renameNameInput.value = '';
+            this.renamePasswordInput.value = '';
+        });
+
+        this.clickTimer = null;
+        this.ADMIN_PASSWORD = "admin"; // Hardcoded simple password
+        this.allLevels = []; // Store all fetched levels
+        this.currentFilter = 'all';
+
         this.init();
     }
 
@@ -62,6 +127,16 @@ class NumberMaze {
         this.generateLevel();
         this.render();
         this.updateStatus("请点击数字 1 开始游戏");
+        
+        // Initialize filter tabs
+        this.filterTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                this.filterTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                this.currentFilter = tab.dataset.filter;
+                this.filterLevels();
+            });
+        });
     }
     
     resetLevel() {
@@ -91,20 +166,21 @@ class NumberMaze {
     
     setDifficulty() {
         const diff = this.difficultySelect.value;
+        // Increase canvas size significantly to allow irregular shapes (trim later)
         switch(diff) {
             case 'easy':
-                this.rows = 7;
-                this.cols = 7;
+                this.rows = 10;
+                this.cols = 10;
                 this.targetLength = 40;
                 break;
             case 'medium':
-                this.rows = 8;
-                this.cols = 8;
+                this.rows = 12;
+                this.cols = 12;
                 this.targetLength = 60;
                 break;
             case 'hard':
-                this.rows = 11;
-                this.cols = 10;
+                this.rows = 15;
+                this.cols = 15;
                 this.targetLength = 100;
                 break;
         }
@@ -120,15 +196,12 @@ class NumberMaze {
             // 2. Create irregular shape (Holes)
             for(let r=0; r<this.rows; r++) {
                 for(let c=0; c<this.cols; c++) {
-                    // Adjust hole probability based on grid size/tightness needed
-                    // For hard mode (100 cells in 110 grid), we need low hole rate
-                    // For easy (40 in 49), low hole rate
-                    // Medium (60 in 64), very low hole rate or 0
+                    // With larger canvas, we don't need random holes as much, 
+                    // but we can add some to break up the "square" feeling of the start area if we want.
+                    // Actually, let's keep it simple: assume all are valid initially,
+                    // and rely on randomWalk + trim to create the shape.
                     
-                    let holeProb = 0.15;
-                    if (this.targetLength / (this.rows * this.cols) > 0.85) {
-                        holeProb = 0.05; // Very dense
-                    }
+                    let holeProb = 0.05; // Low hole probability
                     
                     if (Math.random() < holeProb) {
                         this.grid[r][c] = { isHole: true, value: null, isHidden: false };
@@ -143,25 +216,72 @@ class NumberMaze {
 
             // 3. Generate Path
             let bestPath = [];
-            for(let i=0; i<3000; i++) {
+            
+            // Try more times to find a path with good aspect ratio
+            for(let i=0; i<5000; i++) {
                 let start = validCells[Math.floor(Math.random() * validCells.length)];
                 let path = this.randomWalk(start, this.targetLength); 
-                if (path.length > bestPath.length) {
-                    bestPath = path;
-                    if (bestPath.length >= this.targetLength) break; 
+                
+                // We care about the shape of the path we will ACTUALLY use.
+                // If path is longer than target, we will slice it later.
+                // So let's evaluate the sliced version.
+                let effectivePath = path;
+                if (effectivePath.length > this.targetLength) {
+                    effectivePath = effectivePath.slice(0, this.targetLength);
+                }
+                
+                let ratio = this.getPathRatio(effectivePath);
+                let density = this.getPathDensity(effectivePath);
+                
+                let bestRatio = this.getPathRatio(bestPath);
+                let bestDensity = this.getPathDensity(bestPath);
+                
+                let isBetter = false;
+                
+                if (bestPath.length === 0) {
+                    isBetter = true;
+                } else {
+                    // Priority 1: Reach target length
+                    if (effectivePath.length > bestPath.length) {
+                        // If current best is already target length, don't switch unless ratio is better
+                        if (bestPath.length >= this.targetLength) {
+                            if (ratio < bestRatio) isBetter = true;
+                        } else {
+                            // If current best is short, always take longer one
+                            isBetter = true;
+                        }
+                    } 
+                    // Priority 2: Improve Aspect Ratio (closer to 1.0 is better)
+                    else if (effectivePath.length === bestPath.length) {
+                        if (ratio < bestRatio) {
+                            isBetter = true;
+                        } else if (ratio === bestRatio) {
+                            // Priority 3: Improve Density (avoid large empty spaces)
+                            if (density > bestDensity) {
+                                isBetter = true;
+                            }
+                        }
+                    }
+                    
+                    // Special case: If both are valid length, and both have good ratio, prefer higher density
+                    if (bestPath.length >= this.targetLength && effectivePath.length >= this.targetLength) {
+                         const ratioThreshold = 1.3;
+                         if (ratio <= ratioThreshold && bestRatio <= ratioThreshold) {
+                             if (density > bestDensity) isBetter = true;
+                         }
+                    }
+                }
+                
+                if (isBetter) {
+                    bestPath = effectivePath;
+                    // Break if we have a full-length path with good ratio (e.g., <= 1.3) AND high density (e.g., > 0.7)
+                    if (bestPath.length >= this.targetLength && ratio <= 1.3 && density > 0.7) break; 
                 }
             }
             
             // Check if we met target length requirement
-            // We accept slightly less if hard to find exact, but user requested specific ranges.
-            // Let's try to enforce at least 90% of target if target is large, or exact if small.
             if (bestPath.length >= this.targetLength * 0.95) {
-                // If path is longer than target, truncate it? 
-                // User said "1-40", so max should probably be close to 40.
-                // Let's truncate to targetLength if it exceeds
-                if (bestPath.length > this.targetLength) {
-                    bestPath = bestPath.slice(0, this.targetLength);
-                }
+                // bestPath is already sliced/effectivePath from the loop above
                 
                 this.maxNumber = bestPath.length;
                 
@@ -175,20 +295,17 @@ class NumberMaze {
 
                 // Fill path numbers
                 let consecutiveHidden = 0;
-                
-                // Determine hide rate for this level (random between 0.6 and 0.8)
                 let currentHideRate = 0.6 + Math.random() * 0.2;
                 
                 bestPath.forEach((pos, index) => {
                     let cell = this.grid[pos.r][pos.c];
                     cell.isHole = false;
-                    cell.value = index + 1; // Correct solution value (kept for debugging or hints if needed)
+                    cell.value = index + 1; 
                     cell.isPath = true;
-                    cell.userValue = null; // Value filled by user
+                    cell.userValue = null; 
                     
                     let shouldHide = false;
                     
-                    // Hide numbers logic
                     if (cell.value === 1 || cell.value === this.maxNumber) {
                         shouldHide = false; 
                     } else {
@@ -200,19 +317,95 @@ class NumberMaze {
                     }
                     
                     if (shouldHide) {
-                        cell.isAnchor = false; // Player needs to fill this
-                        cell.isHidden = true;  // Visually hidden initially
+                        cell.isAnchor = false; 
+                        cell.isHidden = true; 
                         consecutiveHidden++;
                     } else {
-                        cell.isAnchor = true;  // Fixed number provided by game
+                        cell.isAnchor = true; 
                         cell.isHidden = false;
                         consecutiveHidden = 0;
                     }
                 });
                 
+                // Trim the grid to the bounding box of the generated path
+                this.trimGrid();
+                
                 success = true;
             }
         }
+    }
+    
+    getPathRatio(path) {
+        if (path.length === 0) return 999;
+        let minR = Infinity, maxR = -Infinity;
+        let minC = Infinity, maxC = -Infinity;
+        
+        path.forEach(p => {
+            if (p.r < minR) minR = p.r;
+            if (p.r > maxR) maxR = p.r;
+            if (p.c < minC) minC = p.c;
+            if (p.c > maxC) maxC = p.c;
+        });
+        
+        let h = maxR - minR + 1;
+        let w = maxC - minC + 1;
+        return Math.max(w, h) / Math.min(w, h);
+    }
+
+    getPathDensity(path) {
+        if (path.length === 0) return 0;
+        let minR = Infinity, maxR = -Infinity;
+        let minC = Infinity, maxC = -Infinity;
+        
+        path.forEach(p => {
+            if (p.r < minR) minR = p.r;
+            if (p.r > maxR) maxR = p.r;
+            if (p.c < minC) minC = p.c;
+            if (p.c > maxC) maxC = p.c;
+        });
+        
+        let h = maxR - minR + 1;
+        let w = maxC - minC + 1;
+        let area = h * w;
+        return path.length / area;
+    }
+
+    trimGrid() {
+        // Find bounding box
+        let minR = this.rows, maxR = 0;
+        let minC = this.cols, maxC = 0;
+        let hasContent = false;
+        
+        for(let r=0; r<this.rows; r++) {
+            for(let c=0; c<this.cols; c++) {
+                if (!this.grid[r][c].isHole) {
+                    if (r < minR) minR = r;
+                    if (r > maxR) maxR = r;
+                    if (c < minC) minC = c;
+                    if (c > maxC) maxC = c;
+                    hasContent = true;
+                }
+            }
+        }
+        
+        if (!hasContent) return; // Should not happen
+        
+        // Extract new grid
+        const newRows = maxR - minR + 1;
+        const newCols = maxC - minC + 1;
+        const newGrid = [];
+        
+        for(let r=0; r<newRows; r++) {
+            let row = [];
+            for(let c=0; c<newCols; c++) {
+                row.push(this.grid[minR + r][minC + c]);
+            }
+            newGrid.push(row);
+        }
+        
+        this.rows = newRows;
+        this.cols = newCols;
+        this.grid = newGrid;
     }
 
     randomWalk(start, targetLen) {
@@ -275,7 +468,7 @@ class NumberMaze {
 
     render() {
         this.boardEl.innerHTML = '';
-        this.boardEl.style.gridTemplateColumns = `repeat(${this.cols}, 50px)`;
+        this.boardEl.style.gridTemplateColumns = `repeat(${this.cols}, 55px)`;
         
         for(let r=0; r<this.rows; r++) {
             for(let c=0; c<this.cols; c++) {
@@ -406,13 +599,23 @@ class NumberMaze {
         
         const query = new AV.Query('Level');
         query.descending('createdAt');
-        query.limit(20);
+        query.limit(1000); // Increase limit to show more levels (default is 100, max is 1000)
         
         try {
             const results = await query.find();
-            this.renderLevelList(results);
+            this.allLevels = results;
+            this.filterLevels();
         } catch (error) {
             this.levelListEl.innerHTML = '加载失败: ' + error.message;
+        }
+    }
+    
+    filterLevels() {
+        if (this.currentFilter === 'all') {
+            this.renderLevelList(this.allLevels);
+        } else {
+            const filtered = this.allLevels.filter(level => level.get('difficulty') === this.currentFilter);
+            this.renderLevelList(filtered);
         }
     }
     
@@ -433,20 +636,108 @@ class NumberMaze {
             
             const date = level.createdAt.toLocaleDateString() + ' ' + level.createdAt.toLocaleTimeString();
             item.innerHTML = `
-                <div>
+                <div class="level-main">
                     <strong>${level.get('name')}</strong>
-                    <div class="level-info">${level.get('difficulty') || 'Unknown'} - Max: ${level.get('maxNumber')}</div>
+                    <div class="level-info">${level.get('difficulty') || 'Unknown'} - Max: ${level.get('maxNumber')} - ${date}</div>
                 </div>
-                <div class="level-info">${date}</div>
+                <div class="level-actions">
+                    <button class="level-btn btn-rename">重命名</button>
+                    <button class="level-btn btn-delete">删除</button>
+                </div>
             `;
             
-            item.addEventListener('click', () => {
+            // Main click to load (exclude buttons)
+            item.querySelector('.level-main').addEventListener('click', () => {
                 this.loadLevelFromCloud(level);
                 this.closeLoadModal();
+            });
+
+            // Rename button
+            item.querySelector('.btn-rename').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showRenameModal(level);
+            });
+
+            // Delete button
+            item.querySelector('.btn-delete').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showDeleteModal(level);
             });
             
             this.levelListEl.appendChild(item);
         });
+    }
+
+    showRenameModal(level) {
+        this.targetLevelId = level.id;
+        this.targetLevelName = level.get('name');
+        
+        this.renameNameInput.value = this.targetLevelName;
+        this.renamePasswordInput.value = '';
+        this.renameModal.style.display = 'block';
+    }
+
+    async executeRename() {
+        const pwd = this.renamePasswordInput.value;
+        const newName = this.renameNameInput.value;
+        
+        if (!pwd) {
+            alert("请输入密码");
+            return;
+        }
+        
+        if (pwd !== this.ADMIN_PASSWORD) {
+            alert("密码错误");
+            return;
+        }
+
+        if (!newName) {
+            alert("请输入关卡名称");
+            return;
+        }
+
+        const level = AV.Object.createWithoutData('Level', this.targetLevelId);
+        level.set('name', newName);
+        
+        try {
+            await level.save();
+            alert("重命名成功");
+            this.renameModal.style.display = 'none';
+            this.openLoadModal(); // Refresh list
+        } catch (error) {
+            alert("重命名失败: " + error.message);
+        }
+    }
+
+    showDeleteModal(level) {
+        this.targetLevelId = level.id;
+        this.deletePasswordInput.value = '';
+        this.passwordModal.style.display = 'block';
+    }
+
+    async executeDelete() {
+        const pwd = this.deletePasswordInput.value;
+        
+        if (!pwd) {
+            alert("请输入密码");
+            return;
+        }
+        
+        if (pwd !== this.ADMIN_PASSWORD) {
+            alert("密码错误");
+            return;
+        }
+
+        const level = AV.Object.createWithoutData('Level', this.targetLevelId);
+        
+        try {
+            await level.destroy();
+            alert("删除成功");
+            this.passwordModal.style.display = 'none';
+            this.openLoadModal(); // Refresh list
+        } catch (error) {
+            alert("删除失败: " + error.message);
+        }
     }
     
     loadLevelFromCloud(levelObj) {
@@ -567,14 +858,82 @@ class NumberMaze {
         this.currentStep = val;
         
         if (this.currentStep === this.maxNumber) {
-            this.updateStatus("🎉 恭喜你！成功通关！ 🎉");
-            this.boardEl.style.pointerEvents = 'none'; // Disable further clicks
-            setTimeout(() => {
-                alert("恭喜通关！");
-            }, 100);
+            this.handleWin();
         } else {
             this.updateStatus(`当前: ${val} -> 请寻找 ${val + 1}`);
         }
+    }
+    
+    handleWin() {
+        this.boardEl.style.pointerEvents = 'none';
+        this.updateStatus("🎉 恭喜你！成功通关！ 🎉");
+        this.triggerCelebration();
+        this.animatePath();
+        // Removed alert as requested
+    }
+    
+    animatePath() {
+        // Collect all cells in order from 1 to maxNumber
+        const cellsMap = new Map();
+        Array.from(this.boardEl.children).forEach(cell => {
+            if (!cell.classList.contains('empty') && !cell.classList.contains('hole')) {
+                const val = parseInt(cell.textContent);
+                if (!isNaN(val)) {
+                    cellsMap.set(val, cell);
+                }
+            }
+        });
+
+        // Clear existing highlights just in case
+        cellsMap.forEach(cell => cell.classList.remove('active', 'last-active'));
+        
+        // Animate one by one
+        let current = 1;
+        const animateStep = () => {
+            if (current > this.maxNumber) return;
+            
+            const cell = cellsMap.get(current);
+            if (cell) {
+                // Ensure it's visible (should be already, but make sure style is applied)
+                cell.classList.remove('hidden-value');
+                cell.classList.add('active');
+                
+                // Add a temporary highlight effect
+                cell.classList.add('path-highlight');
+                
+                // Remove highlight from previous one to create a "moving" effect? 
+                // Or keep them all lit? User said "dynamically show path".
+                // Let's keep them lit but maybe emphasize the current one being drawn.
+                
+                // Optional: scroll into view if needed (not needed for this game size usually)
+            }
+            
+            current++;
+            setTimeout(animateStep, 100); // 100ms per step
+        };
+        
+        animateStep();
+    }
+    
+    triggerCelebration() {
+        const duration = 5 * 1000;
+        const animationEnd = Date.now() + duration;
+        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 999 };
+
+        const randomInRange = (min, max) => Math.random() * (max - min) + min;
+
+        const interval = setInterval(function() {
+            const timeLeft = animationEnd - Date.now();
+
+            if (timeLeft <= 0) {
+                return clearInterval(interval);
+            }
+
+            const particleCount = 50 * (timeLeft / duration);
+            // since particles fall down, start a bit higher than random
+            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+        }, 250);
     }
     
     undoLastStep() {
