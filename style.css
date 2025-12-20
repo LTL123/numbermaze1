@@ -127,26 +127,28 @@ select:focus {
 .cell {
     width: 55px;
     height: 55px;
-    background: white;
+    background: #eef2f7; /* Slightly darker/blueish white for better contrast */
     display: flex;
     justify-content: center;
     align-items: center;
     font-size: 1.6rem;
     font-weight: 800;
-    color: #34495e;
+    color: #2c3e50; /* Darker text */
     cursor: pointer;
     border-radius: 14px;
     user-select: none;
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    box-shadow: 0 6px 10px rgba(163, 177, 198, 0.2), 
-                0 -6px 10px rgba(255, 255, 255, 0.8); /* Soft claymorphism/neumorphism */
-    border: 1px solid rgba(255,255,255,0.8);
+    box-shadow: 0 4px 6px rgba(163, 177, 198, 0.3), 
+                0 -4px 6px rgba(255, 255, 255, 0.8);
+    border: 2px solid #dfe4ea; /* More visible border */
     position: relative;
     overflow: hidden;
 }
 
 .cell:hover {
     transform: translateY(-3px) scale(1.02);
+    background: #fff;
+    border-color: #3498db;
     box-shadow: 0 10px 20px rgba(163, 177, 198, 0.3), 
                 0 -6px 10px rgba(255, 255, 255, 0.8);
 }

@@ -54,9 +54,11 @@ class NumberMaze {
         this.loadModal = document.getElementById('load-modal');
         this.passwordModal = document.getElementById('password-modal');
         this.renameModal = document.getElementById('rename-modal');
+        this.videoModal = document.getElementById('video-modal');
         
         this.closeModalBtns = document.querySelectorAll('.close-modal');
         this.levelListEl = document.getElementById('level-list');
+        this.winVideo = document.getElementById('win-video');
         
         // Modal inputs
         this.deletePasswordInput = document.getElementById('delete-password-input');
@@ -85,6 +87,11 @@ class NumberMaze {
                 const targetId = e.target.dataset.target;
                 if (targetId) {
                     document.getElementById(targetId).style.display = 'none';
+                    // Stop video if closing video modal
+                    if (targetId === 'video-modal') {
+                        this.winVideo.pause();
+                        this.winVideo.currentTime = 0;
+                    }
                 }
             });
         });
@@ -155,6 +162,21 @@ class NumberMaze {
         const diff = this.difficultySelect.value;
         // Increase canvas size significantly to allow irregular shapes (trim later)
         switch(diff) {
+            case 'very-easy':
+                this.rows = 5;
+                this.cols = 5;
+                this.targetLength = 10;
+                break;
+            case 'novice':
+                this.rows = 6;
+                this.cols = 6;
+                this.targetLength = 15;
+                break;
+            case 'beginner':
+                this.rows = 8;
+                this.cols = 8;
+                this.targetLength = 25;
+                break;
             case 'easy':
                 this.rows = 10;
                 this.cols = 10;
@@ -846,7 +868,30 @@ class NumberMaze {
         this.updateStatus("🎉 恭喜你！成功通关！ 🎉");
         this.triggerCelebration();
         this.animatePath();
-        // Removed alert as requested
+        
+        // Ensure elements exist (in case of caching issues or initialization timing)
+        if (!this.videoModal) this.videoModal = document.getElementById('video-modal');
+        if (!this.winVideo) this.winVideo = document.getElementById('win-video');
+
+        // Play congratulation video
+        setTimeout(() => {
+            if (this.videoModal && this.winVideo) {
+                this.videoModal.style.display = 'flex'; // Use flex to center
+                this.videoModal.style.zIndex = '2000'; // Ensure it's on top
+                this.winVideo.currentTime = 0;
+                
+                const playPromise = this.winVideo.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log("Video autoplay prevented:", error);
+                        // Even if autoplay fails, the modal is shown and controls are enabled
+                    });
+                }
+            } else {
+                console.error("Video modal elements not found!");
+                alert("恭喜通关！(视频播放组件未找到，请刷新页面重试)");
+            }
+        }, 800); 
     }
     
     animatePath() {
